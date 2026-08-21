@@ -23,8 +23,59 @@ MARGIN_THRESHOLD = 50000
 MARGIN_LOW = 1000
 MARGIN_HIGH = 2000
 
-HEADER_RE = re.compile(r"^[^\wА-Яа-я\n]*[📱🎧⌚️🤖💻🎮👓🌪️🔌🔘📋🎵].+?•{3,}")
 PRICE_RE = re.compile(r"(-\s*)(\d{3,7})")
+
+# Наценка, которую УЖЕ применил посредник (DMGadgets/marselUAE) поверх
+# настоящей закупочной цены — нужно вычесть её, прежде чем накидывать свою.
+# Формулы взяты из кода, который прислал сам посредник.
+SUPPLIER_MARKUP_KEYWORDS = [
+    ("ray-ban", "flat3000"),
+    ("meta glasses", "flat3000"),
+    ("очки", "flat3000"),
+    ("macbook", "flat4000"),
+    ("фототехника", "flat4000"),
+    ("gopro", "flat4000"),
+    ("instax", "flat4000"),
+    ("canon", "flat4000"),
+    ("ipad", "flat3000"),
+    ("gaming", "flat3000"),
+    ("dyson", "flat5000"),
+    ("аксессуары apple", "flat2000"),
+    ("pitaka", "flat2000"),
+    ("зарядк", "flat1000"),
+    ("charger", "flat1000"),
+    ("airpods", "low10k"),
+    ("galaxy buds", "low10k"),
+    ("buds", "low10k"),
+    ("акустика", "low10k"),
+    ("яндекс", "low10k"),
+    ("acoustics", "low10k"),
+]
+DEFAULT_SUPPLIER_BUCKET = "default50k"
+
+
+def classify_supplier_bucket(header_line_lower: str) -> str | None:
+    for keyword, bucket in SUPPLIER_MARKUP_KEYWORDS:
+        if keyword in header_line_lower:
+            return bucket
+    return None
+
+
+def reverse_supplier_margin(bucket: str, displayed_price: int) -> int:
+    if bucket == "low10k":
+        return displayed_price - (2000 if displayed_price >= 12000 else 1000)
+    if bucket == "flat4000":
+        return displayed_price - 4000
+    if bucket == "flat3000":
+        return displayed_price - 3000
+    if bucket == "flat5000":
+        return displayed_price - 5000
+    if bucket == "flat2000":
+        return displayed_price - 2000
+    if bucket == "flat1000":
+        return displayed_price - 1000
+    # default50k
+    return displayed_price - (3000 if displayed_price >= 53000 else 2000)
 
 
 def get_margin(old_price: int) -> int:
@@ -32,11 +83,31 @@ def get_margin(old_price: int) -> int:
 
 
 def apply_margin(text: str) -> str:
-    def repl(m):
-        price = int(m.group(2))
-        return f"{m.group(1)}{price + get_margin(price)}"
+    """Вычитает наценку посредника (по категории) и накидывает свою."""
+    current_bucket = DEFAULT_SUPPLIER_BUCKET
+    out_lines = []
 
-    return PRICE_RE.sub(repl, text)
+    for line in text.split("\n"):
+        if "•••" in line:
+            stripped = line.strip()
+            if not stripped.startswith("🔘"):
+                # заголовок категории/подкатегории — переопределяем формулу
+                matched = classify_supplier_bucket(line.lower())
+                current_bucket = matched or DEFAULT_SUPPLIER_BUCKET
+            # "🔘 ..." — просто разделитель модели внутри той же категории,
+            # формулу не меняем
+            out_lines.append(line)
+            continue
+
+        def repl(m, bucket=current_bucket):
+            displayed = int(m.group(2))
+            base = reverse_supplier_margin(bucket, displayed)
+            final = base + get_margin(base)
+            return f"{m.group(1)}{final}"
+
+        out_lines.append(PRICE_RE.sub(repl, line))
+
+    return "\n".join(out_lines)
 
 
 def normalize_key(header: str) -> str:
@@ -45,7 +116,7 @@ def normalize_key(header: str) -> str:
 
 def group_key(text: str) -> str:
     for line in text.split("\n"):
-        if HEADER_RE.match(line):
+        if "•••" in line:
             return normalize_key(line)
     return normalize_key(text.split("\n")[0])
 
