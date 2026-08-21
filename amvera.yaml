@@ -1,0 +1,19 @@
+meta:
+  environment: python
+  toolchain:
+    name: pip
+    version: "3.12"
+
+build:
+  requirementsPath: requirements.txt
+  useCache: true
+
+run:
+  scriptName: bot.py
+  containerPort: "80"
+  servicePort: "80"
+  persistenceMount: /data
+
+# Переменные окружения (BOT_TOKEN, TARGET_CHANNEL) задаются не здесь,
+# а в разделе "Переменные окружения" в панели Amvera — так они не
+# попадают в загружаемые файлы.
