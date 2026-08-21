@@ -6,6 +6,7 @@ import re
 import shutil
 
 from aiogram import Bot, Dispatcher, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import Message
 
@@ -127,8 +128,21 @@ async def handle_forward(message: Message):
             chat_id=TARGET_CHANNEL, message_id=target_id, text=new_text
         )
         await message.reply(f"✏️ обновлено: {key[:60]}")
-    except Exception as e:
-        logging.warning("edit failed for %s: %s", key, e)
+        return
+    except TelegramBadRequest as e:
+        if "there is no text in the message to edit" not in str(e):
+            logging.warning("edit_text failed for %s: %s", key, e)
+            await message.reply(f"⚠️ Не удалось отредактировать пост (id {target_id}): {e}")
+            return
+
+    # Пост с фото — цены хранятся в подписи (caption), а не в тексте
+    try:
+        await bot.edit_message_caption(
+            chat_id=TARGET_CHANNEL, message_id=target_id, caption=new_text
+        )
+        await message.reply(f"✏️ обновлено (подпись к фото): {key[:60]}")
+    except TelegramBadRequest as e:
+        logging.warning("edit_caption failed for %s: %s", key, e)
         await message.reply(f"⚠️ Не удалось отредактировать пост (id {target_id}): {e}")
 
 
