@@ -201,6 +201,9 @@ async def handle_forward(message: Message):
         await message.reply(f"✏️ обновлено: {key[:60]}")
         return
     except TelegramBadRequest as e:
+        if "message is not modified" in str(e):
+            await message.reply(f"✅ Цены не изменились: {key[:60]}")
+            return
         if "there is no text in the message to edit" not in str(e):
             logging.warning("edit_text failed for %s: %s", key, e)
             await message.reply(f"⚠️ Не удалось отредактировать пост (id {target_id}): {e}")
@@ -213,6 +216,9 @@ async def handle_forward(message: Message):
         )
         await message.reply(f"✏️ обновлено (подпись к фото): {key[:60]}")
     except TelegramBadRequest as e:
+        if "message is not modified" in str(e):
+            await message.reply(f"✅ Цены не изменились: {key[:60]}")
+            return
         logging.warning("edit_caption failed for %s: %s", key, e)
         await message.reply(f"⚠️ Не удалось отредактировать пост (id {target_id}): {e}")
 
