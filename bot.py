@@ -75,7 +75,8 @@ async def cmd_start(message: Message):
     await message.reply(
         "Пришли (или перешли) пост с прайсом из канала поставщика — "
         "я пересчитаю цены с наценкой (до 50к +1000, от 50к +2000) и "
-        "опубликую/обновлю пост в канале."
+        "отредактирую соответствующий пост в канале. Новые посты не публикую — "
+        "если категория ещё не привязана, использую /remap."
     )
 
 
@@ -114,20 +115,21 @@ async def handle_forward(message: Message):
     cat_map = load_map()
     target_id = cat_map.get(key)
 
-    if target_id:
-        try:
-            await bot.edit_message_text(
-                chat_id=TARGET_CHANNEL, message_id=target_id, text=new_text
-            )
-            await message.reply(f"✏️ обновлено: {key[:60]}")
-            return
-        except Exception as e:
-            logging.warning("edit failed for %s: %s", key, e)
+    if not target_id:
+        await message.reply(
+            f"⚠️ Нет привязки для «{key[:60]}» — ничего не публикую.\n"
+            f"Привяжите вручную: /remap {key.replace(' ', '_')} <message_id>"
+        )
+        return
 
-    sent = await bot.send_message(TARGET_CHANNEL, new_text)
-    cat_map[key] = sent.message_id
-    save_map(cat_map)
-    await message.reply(f"🆕 опубликовано: {key[:60]}")
+    try:
+        await bot.edit_message_text(
+            chat_id=TARGET_CHANNEL, message_id=target_id, text=new_text
+        )
+        await message.reply(f"✏️ обновлено: {key[:60]}")
+    except Exception as e:
+        logging.warning("edit failed for %s: %s", key, e)
+        await message.reply(f"⚠️ Не удалось отредактировать пост (id {target_id}): {e}")
 
 
 async def main():
